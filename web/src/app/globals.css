@@ -55,6 +55,28 @@
   --cf-accent: #b45309; /* controlled saffron — used sparingly           */
   --cf-accent-soft: #fdf1e3;
 
+  /* Chart series -------------------------------------------------------
+     Used ONLY where a chart shows two independent series that must be told
+     apart — for example "if nobody moved" against "with CityFlow AI".
+
+     WHY THESE ARE NOT `primary` AND `secondary`
+     The brand navy and teal sit close together in hue. Measured with the
+     OKLab colour-difference check, that pair separates by ΔE 11 for a reader
+     with normal colour vision and 3 for a reader with tritanopia — well under
+     the 15 needed to be reliably distinguishable. It looks fine to most people
+     and is unreadable to some, which is the worst kind of failure because
+     nobody reports it.
+
+     This blue/amber pair separates by ΔE 28 (normal vision) and at least 23
+     under every simulated colour-vision deficiency, sits inside the lightness
+     band for this surface, clears the chroma floor so neither reads as grey,
+     and holds 3:1 contrast against the card background. Every chart using them
+     ALSO carries a legend and a text table, so identity never rests on colour
+     alone.
+     ------------------------------------------------------------------- */
+  --cf-series-1: #2f61b0; /* the CityFlow AI case                        */
+  --cf-series-2: #c2670c; /* the counterfactual / unsmoothed case        */
+
   /* Traffic status (semantic, never decorative) ----------------------- */
   --cf-traffic-low: #15803d;
   --cf-traffic-low-soft: #e5f5ea;
@@ -123,6 +145,13 @@
   --cf-accent: #e2a04a;
   --cf-accent-soft: #2c2216;
 
+  /* Chart series — re-derived for the dark surface, not lightened
+     mechanically. Both steps were re-checked against #121b2c: inside the
+     dark lightness band, above the chroma floor, ΔE 24 normal vision and
+     at least 22 under every simulated colour-vision deficiency. */
+  --cf-series-1: #5f8fdc;
+  --cf-series-2: #bd8130;
+
   --cf-traffic-low: #4ade80;
   --cf-traffic-low-soft: #14301f;
   --cf-traffic-moderate: #fbbf24;
@@ -171,6 +200,9 @@
   --color-muted: var(--cf-fg-muted);
   --color-subtle: var(--cf-fg-subtle);
   --color-inverse: var(--cf-fg-inverse);
+
+  --color-series-1: var(--cf-series-1);
+  --color-series-2: var(--cf-series-2);
 
   --color-primary: var(--cf-primary);
   --color-primary-hover: var(--cf-primary-hover);

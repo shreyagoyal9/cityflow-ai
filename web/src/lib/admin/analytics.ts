@@ -503,3 +503,113 @@ export async function loadSystemHealth(
 export function modeLabel(code: string): string {
   return getTransportMode(code).label;
 }
+
+/* ==========================================================================
+   PHASE 6 — modelled impact
+   ========================================================================== */
+
+/**
+ * The "what has this achieved" figures.
+ *
+ * ====================== READ THIS BEFORE QUOTING ANY OF IT ==================
+ * EVERY NUMBER HERE IS A MODEL ESTIMATE. Not one of them is a measurement.
+ *
+ * CityFlow AI has no live traffic feed and has never timed a real journey. What
+ * it has is: the demand model's congestion multiplier, the journey time each
+ * person entered themselves, and a record of who accepted a recommendation. The
+ * figures below are arithmetic on those three things.
+ *
+ * They are computed at all because a city evaluating this product will ask
+ * "what would it achieve?", and "we decline to estimate" is not a useful
+ * answer. They are returned WITH their assumptions attached, and the Admin
+ * Portal is required to render those assumptions beside the numbers — so the
+ * honest version is the easy version for whoever builds the next screen.
+ *
+ * WHAT WOULD MAKE THEM REAL
+ * Opt-in recording of actual departure and arrival times. That is a genuine
+ * feature, and `lib/demand/savings.ts` is the seam where it plugs in. Until it
+ * exists, every one of these words stays "estimated".
+ * ============================================================================
+ */
+
+export interface ModelledImpact {
+  /** Recommendations accepted today. The only ones counted. */
+  acceptedToday: number;
+  /** Recommendations shown today, accepted or not. */
+  offeredToday: number;
+  /** Sum of per-person modelled minutes saved. */
+  estimatedMinutesSaved: number;
+  estimatedPersonHours: number;
+  /** Litres of fuel, on the stated assumptions. */
+  estimatedFuelLitres: number;
+  /** Share of accepted trips made by car or motorbike. */
+  vehicleShare: number;
+  /** Road issues at or above the city's high-priority threshold, still open. */
+  highPriorityRoadIssues: number;
+  /** The assumptions behind the fuel figure, for rendering beside it. */
+  fuelAssumptions: string[];
+}
+
+export async function loadModelledImpact(
+  cityCode: CityCode,
+  travelDate: Date
+): Promise<ModelledImpact> {
+  const { getCityConfig } = await import("@/lib/city-config");
+  const { aggregateSavings, estimateFuelLitres } = await import("@/lib/demand/savings");
+
+  const config = await getCityConfig(cityCode);
+
+  const [accepted, offeredToday, highPriorityRoadIssues] = await Promise.all([
+    prisma.recommendation.findMany({
+      where: { cityCode, travelDate, status: "ACCEPTED" },
+      select: {
+        demandAtUsual: true,
+        demandAtRecommended: true,
+        journey: { select: { typicalJourneyMinutes: true, mode: true } },
+      },
+    }),
+    prisma.recommendation.count({ where: { cityCode, travelDate } }),
+    prisma.roadIssue.count({
+      where: {
+        cityCode,
+        priorityScore: { gte: config.highPriorityThreshold },
+        status: { notIn: ["CLOSED", "REJECTED"] },
+      },
+    }),
+  ]);
+
+  /*
+    A recommendation whose journey has since been deleted still counts towards
+    "accepted", but has no journey time to estimate a saving from. Falling back
+    to a made-up number would quietly inflate the total, so it contributes zero.
+  */
+  const withJourney = accepted.filter((row) => row.journey !== null);
+
+  const savings = aggregateSavings(
+    withJourney.map((row) => ({
+      typicalJourneyMinutes: row.journey!.typicalJourneyMinutes,
+      demandAtUsual: row.demandAtUsual,
+      demandAtRecommended: row.demandAtRecommended,
+    }))
+  );
+
+  // Only private vehicles burn fuel in a jam. A metro passenger saves time
+  // without saving a drop, so the share is measured rather than assumed at 100%.
+  const vehicleTrips = withJourney.filter(
+    (row) => row.journey!.mode === "CAR" || row.journey!.mode === "BIKE"
+  ).length;
+  const vehicleShare = withJourney.length === 0 ? 0 : vehicleTrips / withJourney.length;
+
+  const fuel = estimateFuelLitres(savings.totalMinutes, vehicleShare);
+
+  return {
+    acceptedToday: accepted.length,
+    offeredToday,
+    estimatedMinutesSaved: savings.totalMinutes,
+    estimatedPersonHours: savings.personHours,
+    estimatedFuelLitres: fuel.litres,
+    vehicleShare,
+    highPriorityRoadIssues,
+    fuelAssumptions: fuel.assumptions,
+  };
+}

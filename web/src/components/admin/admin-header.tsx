@@ -19,8 +19,9 @@ import { cn } from "@/lib/utils";
  * could be handed to a public authority later — but naming it after an
  * authority that does not run it would misrepresent who is accountable for it.
  *
- * It is also NOT the Municipal Dashboard. That is a separate, already-existing
- * system for road repairs, with no authority over traffic recommendations.
+ * It is also NOT the Municipal Dashboard. That is the third portal, at
+ * /municipal: road inspection, work assignment and repair tracking, with no
+ * authority over traffic recommendations and no access to commuter data.
  *
  * The chrome is visibly different from the commuter portal — different mark
  * treatment, no city selector, no assistant — so nobody is ever unsure which
@@ -33,6 +34,7 @@ const ADMIN_LINKS = [
   { href: "/admin/roads", label: "Road conditions" },
   { href: "/admin/reports", label: "Reports" },
   { href: "/admin/simulation", label: "Simulation" },
+  { href: "/admin/config", label: "Configuration" },
 ];
 
 export function AdminHeader() {

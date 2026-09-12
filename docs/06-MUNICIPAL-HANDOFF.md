@@ -1,9 +1,27 @@
 # Handing road issues to the Municipal Dashboard
 
-> **The Municipal Dashboard is a separate, already-existing system.**
-> It is not built in this repository, it is not redesigned here, and nothing in
-> CityFlow AI controls it. This document describes the one thing that crosses
-> between them: a prioritised list of possible road issues.
+> ## ⚠️ SUPERSEDED BY PHASE 6
+>
+> **This document describes how things worked in Phases 1–5, when the Municipal
+> Dashboard was an external system and CityFlow AI's involvement stopped at
+> exporting a prioritised list.**
+>
+> **In Phase 6 the Municipal Dashboard moved into this repository**, at
+> `/municipal`, with a full inspection → assignment → repair → sign-off
+> workflow and an employee directory. The reasoning for that reversal — and how
+> the honesty rule below is now enforced by the data model rather than by
+> leaving the feature out — is in
+> [10-PHASE-6.md](10-PHASE-6.md#12-the-municipal-dashboard-is-a-separate-system).
+>
+> **What is still accurate here:** the evidence model, the priority scoring, the
+> merging of duplicate reports, and above all the distinction between what
+> citizen reports can support and what only an inspection can establish. The
+> hand-off export at `/api/admin/roads/handoff` also still exists, for a council
+> that runs its own system and wants the list rather than the workflow.
+>
+> **What is no longer accurate:** the "Municipal Dashboard" column below now
+> describes the `/municipal` portal in this repository, not a third-party
+> system.
 
 ---
 

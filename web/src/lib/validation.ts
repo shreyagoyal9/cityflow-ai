@@ -166,8 +166,15 @@ export const travelProfileSchema = z
 
 export type TravelProfileInput = z.infer<typeof travelProfileSchema>;
 
-/** Payload for recording what the user decided about today's recommendation. */
+/** Payload for recording what the user decided about a recommendation. */
 export const recommendationDecisionSchema = z.object({
+  /**
+   * Which routine's recommendation this decision is about.
+   *
+   * Required since Phase 6: a person may have several recommendations on the
+   * same day, and "today's recommendation" stopped being a single thing.
+   */
+  journeyId: z.string().trim().min(1, "Which journey is this for?").max(40),
   decision: z.enum(["ACCEPTED", "KEPT_USUAL", "CUSTOM"]),
   /** Required only when the decision is CUSTOM. */
   chosenDeparture: timeOfDaySchema.optional(),
@@ -198,6 +205,14 @@ export const intentConfirmSchema = z
   .object({
     /** The assistant message whose card was pressed, so it can be marked done. */
     messageId: z.string().trim().max(40).optional(),
+    /**
+     * The routine the card was about.
+     *
+     * Echoed back by the client rather than re-guessed on the server, so the
+     * plan is written against the routine the person actually saw named — not
+     * whichever one we would assume by the time they pressed Confirm.
+     */
+    journeyId: z.string().trim().max(40).optional(),
     updatedDeparture: timeOfDaySchema.optional(),
     transportMode: z
       .enum(["CAR", "BIKE", "BUS", "METRO", "WALK", "CYCLE", "OTHER"])
@@ -340,3 +355,324 @@ export const roadDetectionBatchSchema = z.object({
 });
 
 export type RoadDetectionBatchInput = z.infer<typeof roadDetectionBatchSchema>;
+
+/* ==========================================================================
+   PHASE 6 — journeys, one-off trips, saved locations, rewards, municipal work
+   ========================================================================== */
+
+/** A routine's display name. Optional — one is generated when it is blank. */
+export const journeyLabelSchema = z
+  .string()
+  .trim()
+  .max(48, "Please keep the name under 48 characters")
+  .optional()
+  .or(z.literal(""));
+
+const latitude = z.number().min(-90).max(90).nullable().optional();
+const longitude = z.number().min(-180).max(180).nullable().optional();
+
+/**
+ * One recurring journey.
+ *
+ * Shares every rule with the old single-routine schema, plus the two refinements
+ * that matter: an arrival that cannot be met, and a "flexible" routine that
+ * allows movement in neither direction. Both were real bugs people hit — the
+ * second produces a routine the engine can never act on while the UI insists it
+ * is flexible.
+ */
+export const journeySchema = z
+  .object({
+    label: journeyLabelSchema,
+
+    originArea: areaSchema,
+    originLat: latitude,
+    originLng: longitude,
+
+    destinationArea: areaSchema,
+    destinationLat: latitude,
+    destinationLng: longitude,
+    destinationType: z.enum(["WORK", "COLLEGE", "SCHOOL", "OTHER"]),
+
+    usualDeparture: timeOfDaySchema,
+    requiredArrival: timeOfDaySchema,
+    typicalJourneyMinutes: z
+      .number()
+      .int("Please enter a whole number of minutes")
+      .min(1, "Journey time must be at least 1 minute")
+      .max(300, "Please enter a journey time under 5 hours"),
+    travelDays: z
+      .array(z.enum(["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]))
+      .min(1, "Please choose at least one travel day"),
+
+    isFlexible: z.boolean(),
+    flexibilityMinutes: z.number().int().min(0).max(120),
+    willingToLeaveEarlier: z.boolean(),
+    willingToLeaveLater: z.boolean(),
+
+    mode: z.enum(["CAR", "BIKE", "BUS", "METRO", "WALK", "CYCLE", "OTHER"]),
+  })
+  .refine(
+    (data) => {
+      const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+      const departure = toMin(data.usualDeparture);
+      const arrival = toMin(data.requiredArrival);
+      if (arrival < departure) return true; // crosses midnight
+      return arrival - departure >= data.typicalJourneyMinutes;
+    },
+    {
+      message:
+        "Your required arrival is earlier than your departure plus your journey time. Please check these three values.",
+      path: ["requiredArrival"],
+    }
+  )
+  .refine(
+    (data) => !data.isFlexible || data.willingToLeaveEarlier || data.willingToLeaveLater,
+    {
+      message:
+        "If this journey is flexible, please allow leaving earlier, later, or both.",
+      path: ["willingToLeaveEarlier"],
+    }
+  );
+
+export type JourneyInputSchema = z.infer<typeof journeySchema>;
+
+/** Payload for POST /api/journeys/reorder */
+export const journeyReorderSchema = z.object({
+  orderedIds: z.array(z.string().trim().min(1).max(40)).max(16),
+});
+
+/** Payload for PATCH /api/journeys/[id] — pause or resume. */
+export const journeyActiveSchema = z.object({ isActive: z.boolean() });
+
+/* -------------------------------------------------------------------------- */
+/*  Plan a trip                                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A one-off trip.
+ *
+ * The constraint runs the OTHER WAY from a routine: the person gives an arrival
+ * deadline and the engine works backwards to a departure. So there is no
+ * `usualDeparture` here, and no flexibility window — the window is "any time
+ * that gets me there".
+ */
+export const tripPlanSchema = z.object({
+  originArea: areaSchema,
+  destinationArea: areaSchema,
+
+  /** YYYY-MM-DD. Validated as a real date, not just a shape. */
+  travelDate: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Please choose a date")
+    .refine((value) => !Number.isNaN(Date.parse(value)), "That date is not valid"),
+
+  requiredArrival: timeOfDaySchema,
+  typicalJourneyMinutes: z
+    .number()
+    .int()
+    .min(1, "Journey time must be at least 1 minute")
+    .max(300, "Please enter a journey time under 5 hours"),
+
+  mode: z.enum(["CAR", "BIKE", "BUS", "METRO", "WALK", "CYCLE", "OTHER"]),
+  tripType: z.enum([
+    "MEETING",
+    "FLIGHT",
+    "TRAIN",
+    "MOVIE",
+    "APPOINTMENT",
+    "EVENT",
+    "OTHER",
+  ]),
+});
+
+export type TripPlanInput = z.infer<typeof tripPlanSchema>;
+
+/* -------------------------------------------------------------------------- */
+/*  Saved locations                                                            */
+/* -------------------------------------------------------------------------- */
+
+export const savedLocationSchema = z.object({
+  label: z
+    .string()
+    .trim()
+    .min(1, "Please give this place a name")
+    .max(40, "Please keep the name under 40 characters"),
+  kind: z.enum(["HOME", "WORK", "EDUCATION", "GYM", "FAMILY", "OTHER"]),
+  area: areaSchema,
+  lat: latitude,
+  lng: longitude,
+});
+
+export type SavedLocationInput = z.infer<typeof savedLocationSchema>;
+
+/* -------------------------------------------------------------------------- */
+/*  Profile and settings                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Profile picture ceiling.
+ *
+ * The browser crops to a square and downscales to 256px before upload, which
+ * lands around 15-25 KB as JPEG. 60 KB of image is roughly 80 KB as a base64
+ * data URL, which is the limit here. Same honest constraint as road photos: a
+ * database column is not an image store.
+ */
+export const MAX_AVATAR_DATA_URL_LENGTH = 90_000;
+
+export const accountSettingsSchema = z.object({
+  displayName: displayNameSchema,
+
+  /** Indian mobile numbers, with or without the +91 country code. */
+  phone: z
+    .string()
+    .trim()
+    .regex(/^(\+?91[\s-]?)?[6-9]\d{9}$/, "Please enter a valid 10-digit mobile number")
+    .optional()
+    .or(z.literal("")),
+
+  profilePictureUrl: z
+    .string()
+    .max(MAX_AVATAR_DATA_URL_LENGTH, "That picture is too large even after resizing.")
+    .regex(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/, "That does not look like an image.")
+    .optional()
+    .or(z.literal("")),
+
+  privacyLevel: z.enum(["ANONYMOUS", "PARTIAL", "FULL"]),
+});
+
+export const notificationSettingsSchema = z.object({
+  allowNotifications: z.boolean(),
+  notifyDailyRecommendation: z.boolean(),
+  notifyTrafficAlerts: z.boolean(),
+  notifyRoadDetections: z.boolean(),
+  notifyRewards: z.boolean(),
+  /** 30, 90, 180 or 365 days. */
+  locationHistoryRetentionDays: z.number().int().min(30).max(365),
+});
+
+export type AccountSettingsInput = z.infer<typeof accountSettingsSchema>;
+export type NotificationSettingsInput = z.infer<typeof notificationSettingsSchema>;
+
+/* -------------------------------------------------------------------------- */
+/*  Rewards                                                                    */
+/* -------------------------------------------------------------------------- */
+
+export const redeemSchema = z.object({
+  itemId: z.string().trim().min(1).max(40),
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Authentication: verification and password reset                            */
+/* -------------------------------------------------------------------------- */
+
+export const forgotPasswordSchema = z.object({ email: emailSchema });
+
+export const resetPasswordSchema = z
+  .object({
+    token: z.string().trim().min(20, "That reset link is not valid").max(200),
+    password: passwordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "The two passwords do not match",
+    path: ["confirmPassword"],
+  });
+
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+/* -------------------------------------------------------------------------- */
+/*  Municipal Dashboard                                                        */
+/* -------------------------------------------------------------------------- */
+
+export const employeeSchema = z.object({
+  staffCode: z
+    .string()
+    .trim()
+    .min(2, "Please enter a staff number")
+    .max(24, "Please keep the staff number under 24 characters")
+    .regex(/^[A-Za-z0-9-]+$/, "Use letters, numbers and hyphens only"),
+  name: z
+    .string()
+    .trim()
+    .min(2, "Please enter the employee's name")
+    .max(60, "Please keep the name under 60 characters"),
+  phone: z
+    .string()
+    .trim()
+    .regex(/^(\+?91[\s-]?)?[6-9]\d{9}$/, "Please enter a valid 10-digit mobile number")
+    .optional()
+    .or(z.literal("")),
+  email: emailSchema.optional().or(z.literal("")),
+  assignedArea: z
+    .string()
+    .trim()
+    .max(80, "Please keep the area under 80 characters")
+    .optional()
+    .or(z.literal("")),
+  role: z.enum(["FIELD_WORKER", "INSPECTOR", "SUPERVISOR"]),
+  isActive: z.boolean(),
+});
+
+export type EmployeeInput = z.infer<typeof employeeSchema>;
+
+/**
+ * A change to a road issue's municipal status.
+ *
+ * `note` is required for REJECTED, because "this is not a real defect" is a
+ * judgement that someone should have to justify in writing. Everything else is
+ * optional.
+ */
+export const roadIssueStatusSchema = z
+  .object({
+    status: z.enum([
+      "NEW",
+      "VERIFIED",
+      "ASSIGNED",
+      "ACKNOWLEDGED",
+      "IN_PROGRESS",
+      "COMPLETED",
+      "CLOSED",
+      "REJECTED",
+    ]),
+    employeeId: z.string().trim().max(40).optional().or(z.literal("")),
+    dueAt: z
+      .string()
+      .trim()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Please choose a date")
+      .optional()
+      .or(z.literal("")),
+    note: z.string().trim().max(600).optional().or(z.literal("")),
+  })
+  .refine((data) => data.status !== "ASSIGNED" || Boolean(data.employeeId), {
+    message: "Choose the employee this work is assigned to.",
+    path: ["employeeId"],
+  })
+  .refine((data) => data.status !== "REJECTED" || Boolean(data.note && data.note.length >= 5), {
+    message: "Please say why this is not a real defect. It is kept as a record.",
+    path: ["note"],
+  });
+
+export type RoadIssueStatusInput = z.infer<typeof roadIssueStatusSchema>;
+
+/* -------------------------------------------------------------------------- */
+/*  City configuration                                                         */
+/* -------------------------------------------------------------------------- */
+
+export const cityConfigSchema = z.object({
+  highPriorityThreshold: z.number().int().min(0).max(100),
+  confirmationReportCount: z.number().int().min(1).max(20),
+  sensorImpactThreshold: z.number().min(5).max(40),
+
+  pointsForFollowingRecommendation: z.number().int().min(0).max(1000),
+  pointsForCarpool: z.number().int().min(0).max(1000),
+  pointsForModeSwitch: z.number().int().min(0).max(1000),
+  pointsForCorroboratedRoadReport: z.number().int().min(0).max(1000),
+  voucherValidityDays: z.number().int().min(7).max(730),
+
+  defaultFlexibilityMinutes: z.number().int().min(0).max(120),
+  peakDemandThreshold: z.number().int().min(20).max(100),
+});
+
+export type CityConfigInput = z.infer<typeof cityConfigSchema>;

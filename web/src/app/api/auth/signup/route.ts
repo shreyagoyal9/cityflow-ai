@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db";
+import { issueToken } from "@/lib/auth/tokens";
+import { sendEmail, verificationEmail } from "@/lib/email";
 import { hashPassword } from "@/lib/auth/password";
 import { generateUniqueCityflowId } from "@/lib/auth/cityflow-id";
 import { startSession } from "@/lib/auth/session";
@@ -97,6 +99,26 @@ export async function POST(request: Request) {
       cityflowId: user.cityflowId,
       role: user.role,
     });
+
+    /*
+      7. Send the confirmation email.
+
+      AWAITED BUT NEVER ALLOWED TO FAIL THE SIGN-UP.
+      Creating the account has already succeeded and the person is already
+      signed in. If the mail provider is down — or, by default, not configured
+      at all — throwing here would show them "we could not create your account"
+      about an account that exists, and they would try again and hit the
+      duplicate-email check. So the failure is logged and swallowed.
+
+      Verification is not a gate on using CityFlow AI; it only establishes that
+      we can reach somebody, which is what makes password reset trustworthy.
+    */
+    try {
+      const token = await issueToken(user.id, "EMAIL_VERIFICATION");
+      await sendEmail(verificationEmail(user.email, token));
+    } catch (error) {
+      console.error("[signup] confirmation email failed (account was created):", error);
+    }
 
     return NextResponse.json(
       {

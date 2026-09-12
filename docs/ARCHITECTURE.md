@@ -1,6 +1,13 @@
 # CityFlow AI — Architecture
 
-> Status: **Phases 1–5 complete.** Everything described below is implemented.
+> Status: **Phases 1–6 complete.** Everything described below is implemented.
+>
+> Phase 6 added a Python ML service, multiple journeys per person, one-off trip
+> planning, a rewards ledger, the Municipal Dashboard as a third in-repository
+> portal, and per-city configuration. It also reversed two earlier decisions.
+> **See [10-PHASE-6.md](10-PHASE-6.md) for what changed and why** — this
+> document has been updated for the new portal layout but the Phase 6 document
+> is the authority on the reasoning.
 
 ---
 
@@ -12,15 +19,34 @@ CityFlow AI has three separate parts. They are deliberately **not** merged.
 |---|---|---|
 | **User / Commuter Portal** | Citizens | This repository, routes `/`, `/dashboard`, `/profile` |
 | **Admin Portal** | The CityFlow AI project team today; possibly a government authority in future | This repository, routes under `/admin` |
-| **Municipal Dashboard** | Municipal road-maintenance staff | **A separate, already-existing system.** Not built here. Receives a hand-off file from `/api/admin/roads/handoff`. |
+| **Municipal Dashboard** | Municipal road-maintenance staff | This repository, routes under `/municipal` *(moved in-house in Phase 6)* |
 
 ### What the Municipal Dashboard may and may not do
 
-It is responsible for: receiving reported road problems → prioritising → inspection
-→ repair → status update.
+It is responsible for: receiving reported road problems → inspection →
+verification → work assignment → repair → sign-off. The workflow is a state
+machine (`web/src/lib/municipal/workflow.ts`) that makes the dishonest
+sequences unreachable: an issue cannot be assigned before an inspector verifies
+it, or completed before work has started, and every transition writes an audit
+row naming the officer.
 
 It has **no authority** over user schedules, departure recommendations, traffic
 optimisation, demand forecasting, the recommendation engine, or the Admin Portal.
+
+It also **cannot see any commuter data at all** — not a routine, not a
+departure, not who reported a pothole. That is enforced twice: `proxy.ts` gates
+the route on the `MUNICIPAL` role at the edge, `lib/auth/municipal.ts` re-checks
+against the database inside every page and API route, and no query in
+`lib/municipal/` touches a commuter table.
+
+### A fourth service, not a fourth portal
+
+The **ML service** (`ml/`, FastAPI) is not a portal and has no interface. It
+holds no database, no sessions and no personal data: a commuter reaches it as an
+opaque `ref` string. It exists because Prophet, XGBoost and OR-Tools are Python
+libraries that cannot run on Vercel's serverless runtime. The web application
+falls back to its own TypeScript demand model whenever the service is absent or
+slow, and says on screen which one produced the numbers.
 
 ---
 

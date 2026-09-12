@@ -20,9 +20,24 @@ interface AuthShellProps {
   children: ReactNode;
   /** Small line under the form, e.g. "Already have an account? Log in". */
   footer: ReactNode;
+  /**
+   * What this page is for, which decides the wording in the side column.
+   *
+   * "joining" is the sign-up and log-in case. "recovery" covers password reset
+   * and email confirmation — telling somebody resetting their password that
+   * they "are joining for Delhi" is the kind of small wrongness that makes a
+   * product feel like it was assembled rather than written.
+   */
+  intent?: "joining" | "recovery";
 }
 
-export function AuthShell({ title, subtitle, children, footer }: AuthShellProps) {
+export function AuthShell({
+  title,
+  subtitle,
+  children,
+  footer,
+  intent = "joining",
+}: AuthShellProps) {
   const { city } = useCity();
 
   return (
@@ -46,28 +61,48 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
           {/* ------------------------------------------------- reassurance */}
           <aside className="mx-auto w-full max-w-md lg:mx-0 lg:pt-4">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-secondary">
-              You are joining for {city.name}
+              {intent === "joining"
+                ? `You are joining for ${city.name}`
+                : "Account recovery"}
             </p>
 
             <h2 className="mt-3 text-xl font-semibold leading-snug text-fg">
-              Smarter Departures, Smoother Journeys
+              {intent === "joining"
+                ? "Smarter Departures, Smoother Journeys"
+                : "Getting you back into your account"}
             </h2>
 
             <ul className="mt-6 space-y-4">
-              {[
-                {
-                  title: "You get an anonymous CityFlow ID",
-                  body: "Your travel preferences are linked to an ID like CF-8X42K91, not to your name.",
-                },
-                {
-                  title: "Your email is only for account access",
-                  body: "Signing in, account recovery and important service messages. Nothing else.",
-                },
-                {
-                  title: "Recommendations are suggestions",
-                  body: "You always decide when to leave, and you can change your plan at any time.",
-                },
-              ].map((item) => (
+              {(intent === "joining"
+                ? [
+                    {
+                      title: "You get an anonymous CityFlow ID",
+                      body: "Your travel preferences are linked to an ID like CF-8X42K91, not to your name.",
+                    },
+                    {
+                      title: "Your email is only for account access",
+                      body: "Signing in, account recovery and important service messages. Nothing else.",
+                    },
+                    {
+                      title: "Recommendations are suggestions",
+                      body: "You always decide when to leave, and you can change your plan at any time.",
+                    },
+                  ]
+                : [
+                    {
+                      title: "Links are short-lived and single-use",
+                      body: "A reset link lasts one hour and stops working the moment it is used, so one left in a mailbox cannot be reused.",
+                    },
+                    {
+                      title: "We never say whether an address has an account",
+                      body: "The same message appears either way. Otherwise anybody could check whether a particular person is registered here.",
+                    },
+                    {
+                      title: "Resetting signs you out everywhere",
+                      body: "Every other reset link for the account is cancelled at the same time.",
+                    },
+                  ]
+              ).map((item) => (
                 <li key={item.title} className="rounded-lg border border-border-base bg-surface p-4">
                   <p className="text-sm font-semibold text-fg">{item.title}</p>
                   <p className="mt-1 text-sm leading-relaxed text-muted">{item.body}</p>

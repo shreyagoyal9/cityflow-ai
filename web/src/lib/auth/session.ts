@@ -5,6 +5,7 @@ import { SESSION_COOKIE_NAME } from "@/lib/auth/session-cookie";
 import {
   SESSION_MAX_AGE_SECONDS,
   type SessionPayload,
+  type SessionRole,
   createSessionToken,
   verifySessionToken,
 } from "@/lib/auth/jwt";
@@ -57,7 +58,7 @@ export interface CurrentUser {
   cityflowId: string;
   cityCode: string | null;
   onboardingCompleted: boolean;
-  role: "USER" | "ADMIN";
+  role: SessionRole;
 }
 
 /**

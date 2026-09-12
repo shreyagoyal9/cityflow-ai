@@ -1,0 +1,59 @@
+# =============================================================================
+# CityFlow AI — ML service dependencies
+# =============================================================================
+# REQUIRES PYTHON 3.10 OR NEWER. 3.11 is what the Dockerfile and CI use.
+#
+# Python 3.9 will NOT work, and fails in two separate ways:
+#   1. networkx 3.4 dropped 3.9 entirely, so `pip install` stops there.
+#   2. The request models use PEP 604 unions (`float | None`). Pydantic has to
+#      evaluate those at runtime to build a validator, and `X | Y` is not a
+#      valid runtime expression before 3.10 — so even with the install forced
+#      through, the service would fail to start.
+#
+# macOS ships an old Python and Anaconda's base environment is often 3.9. See
+# README.md for the one-line fix with either conda or Homebrew.
+#
+# Pinned exactly. An unpinned forecasting stack is how a model that worked in
+# March silently produces different numbers in June.
+# =============================================================================
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.5
+pydantic-settings==2.7.1
+
+# --- Forecasting -------------------------------------------------------------
+prophet==1.1.6
+
+# cmdstanpy is a TRANSITIVE dependency of prophet, and it is pinned here on
+# purpose.
+#
+# Prophet is not pure Python: it fits through CmdStan, and cmdstanpy is the
+# bridge to that compiled backend. Prophet 1.1.6 only asks for
+# `cmdstanpy>=1.0.4`, so pip resolves the newest release — which on a fresh
+# install was 1.3.0, and that combination fails to load the backend at all.
+#
+# The failure is nasty to diagnose because Prophet's `_load_stan_backend`
+# catches the real exception into a debug log and then dies with
+# `AttributeError: 'Prophet' object has no attribute 'stan_backend'`, naming
+# neither the cause nor the fix.
+#
+# Lesson worth keeping: pinning only the direct dependencies is not pinning.
+# The header above claims exact pins, and this is the one that had to be added
+# to make that claim true.
+cmdstanpy==1.2.4
+pandas==2.2.3
+numpy==1.26.4
+xgboost==2.1.3
+scikit-learn==1.6.1
+
+# --- Optimisation ------------------------------------------------------------
+ortools==9.11.4210
+networkx==3.4.2
+
+# --- Caching -----------------------------------------------------------------
+redis==5.2.1
+
+# --- Testing -----------------------------------------------------------------
+pytest==8.3.4
+httpx==0.28.1

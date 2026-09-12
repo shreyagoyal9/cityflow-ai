@@ -9,14 +9,30 @@ import { getAuthSecret } from "@/lib/env";
  * uses: the Node.js runtime for API routes and the Edge runtime for middleware.
  */
 
+/**
+ * The three portals, as they appear in a session.
+ *
+ * Mirrors the `UserRole` enum in the Prisma schema. It is redeclared here
+ * rather than imported because this module runs in the EDGE runtime, where the
+ * Prisma client cannot be loaded at all.
+ */
+export type SessionRole = "USER" | "ADMIN" | "MUNICIPAL";
+
+/** Every role that is a valid session role, for runtime narrowing. */
+const SESSION_ROLES: readonly SessionRole[] = ["USER", "ADMIN", "MUNICIPAL"];
+
 /** What we store inside the login cookie. Deliberately tiny — no personal data. */
 export interface SessionPayload {
   /** Internal user id (database primary key). */
   userId: string;
   /** Anonymous public ID, e.g. "CF-8X42K91". */
   cityflowId: string;
-  /** "USER" for commuters, "ADMIN" for the Admin Portal (Phase 4). */
-  role: "USER" | "ADMIN";
+  /**
+   * "USER" for commuters, "ADMIN" for the Admin Portal, "MUNICIPAL" for the
+   * Municipal Dashboard. The three are mutually exclusive by design: a
+   * municipal officer has no access to commuter data or demand analytics.
+   */
+  role: SessionRole;
 }
 
 /** How long a login lasts before the user has to sign in again. */
@@ -61,12 +77,12 @@ export async function verifySessionToken(
       return null;
     }
 
-    // Written this way (rather than a `!==` check) so TypeScript can be certain
-    // the value really is one of the two allowed roles.
-    const role: SessionPayload["role"] | null =
-      payload.role === "ADMIN" ? "ADMIN" : payload.role === "USER" ? "USER" : null;
+    // Checked against the allow-list rather than cast, so a tampered or
+    // out-of-date cookie carrying an unknown role is rejected as "not logged
+    // in" instead of being trusted.
+    const role = SESSION_ROLES.find((candidate) => candidate === payload.role);
 
-    if (role === null) return null;
+    if (!role) return null;
 
     return { userId, cityflowId, role };
   } catch {

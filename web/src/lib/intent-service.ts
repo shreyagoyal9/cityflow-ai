@@ -1,4 +1,4 @@
-import type { TravelIntention, TravelProfile } from "@prisma/client";
+import type { Journey, TravelIntention } from "@prisma/client";
 
 import type { CityCode } from "@/lib/cities";
 import { prisma } from "@/lib/db";
@@ -30,7 +30,14 @@ export interface ApplyIntentionArgs {
   travelDate: Date;
   /** A Date whose local fields are that date in the app timezone. */
   localDate: Date;
-  profile: TravelProfile;
+  /**
+   * The routine this change applies to.
+   *
+   * Was `profile` until Phase 6. Passing the JOURNEY rather than the person is
+   * what stops "I'm leaving late tomorrow" from silently rewriting the plan for
+   * someone's other trip that day.
+   */
+  journey: Journey;
   /** The change the person confirmed. */
   change: {
     updatedDeparture?: string;
@@ -50,11 +57,11 @@ export interface ApplyIntentionResult {
 export async function applyIntention(
   args: ApplyIntentionArgs
 ): Promise<ApplyIntentionResult> {
-  const { userId, cityCode, travelDate, localDate, profile, change } = args;
+  const { userId, cityCode, travelDate, localDate, journey, change } = args;
 
-  const existing = await prisma.travelIntention.findUnique({
-    where: { userId_travelDate: { userId, travelDate } },
-  });
+  const key = { journeyId_travelDate: { journeyId: journey.id, travelDate } };
+
+  const existing = await prisma.travelIntention.findUnique({ where: key });
 
   // Which slot is this person currently counted in, if any?
   const previousSlot =
@@ -66,26 +73,27 @@ export async function applyIntention(
   const cancelling = change.cancel === true;
 
   const newDeparture = cancelling
-    ? (existing?.updatedDeparture ?? profile.usualDeparture)
+    ? (existing?.updatedDeparture ?? journey.usualDeparture)
     : (change.updatedDeparture ??
       existing?.updatedDeparture ??
-      profile.usualDeparture);
+      journey.usualDeparture);
 
   const newSlot = cancelling ? null : roundToSlot(toMinutes(newDeparture) ?? 0);
 
   const transportMode =
-    change.transportMode ?? existing?.transportMode ?? profile.primaryMode;
+    change.transportMode ?? existing?.transportMode ?? journey.mode;
 
   // ------------------------------------------------- 1. store the intention
   const intention = await prisma.travelIntention.upsert({
-    where: { userId_travelDate: { userId, travelDate } },
+    where: key,
     create: {
       userId,
+      journeyId: journey.id,
       travelDate,
       cityCode,
-      originZone: toZoneKey(profile.homeArea),
-      destinationZone: toZoneKey(profile.destinationArea),
-      plannedDeparture: profile.usualDeparture,
+      originZone: toZoneKey(journey.originArea),
+      destinationZone: toZoneKey(journey.destinationArea),
+      plannedDeparture: journey.usualDeparture,
       updatedDeparture: newSlot === null ? newDeparture : toTimeString(newSlot),
       transportMode,
       status: cancelling ? "CANCELLED" : "CONFIRMED",
@@ -95,9 +103,9 @@ export async function applyIntention(
     },
     update: {
       cityCode,
-      originZone: toZoneKey(profile.homeArea),
-      destinationZone: toZoneKey(profile.destinationArea),
-      plannedDeparture: profile.usualDeparture,
+      originZone: toZoneKey(journey.originArea),
+      destinationZone: toZoneKey(journey.destinationArea),
+      plannedDeparture: journey.usualDeparture,
       updatedDeparture: newSlot === null ? newDeparture : toTimeString(newSlot),
       transportMode,
       status: cancelling ? "CANCELLED" : "CONFIRMED",
@@ -112,7 +120,7 @@ export async function applyIntention(
 
   // -------------------------------- 3. record the decision on today's advice
   const recommendation = await prisma.recommendation.findUnique({
-    where: { userId_travelDate: { userId, travelDate } },
+    where: { journeyId_travelDate: { journeyId: journey.id, travelDate } },
   });
 
   if (recommendation && !cancelling && newSlot !== null) {
@@ -139,7 +147,7 @@ export async function applyIntention(
   const reoptimisation = await reoptimiseCity(cityCode, travelDate, localDate);
 
   const own = await prisma.recommendation.findUnique({
-    where: { userId_travelDate: { userId, travelDate } },
+    where: { journeyId_travelDate: { journeyId: journey.id, travelDate } },
     select: { updatedByOptimiser: true, updateAcknowledged: true },
   });
 
@@ -150,12 +158,12 @@ export async function applyIntention(
   };
 }
 
-/** The person's confirmed plan for a date, if they have one. */
+/** The confirmed plan for one routine on a date, if there is one. */
 export async function loadIntention(
-  userId: string,
+  journeyId: string,
   travelDate: Date
 ): Promise<TravelIntention | null> {
   return prisma.travelIntention.findUnique({
-    where: { userId_travelDate: { userId, travelDate } },
+    where: { journeyId_travelDate: { journeyId, travelDate } },
   });
 }

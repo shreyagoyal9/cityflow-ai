@@ -1,0 +1,133 @@
+# =============================================================================
+# CityFlow AI — the whole stack, one command
+# =============================================================================
+#   docker compose up --build
+#   → http://localhost:8080
+#
+# WHAT THIS IS FOR
+# Running the complete project on one machine with no accounts, no API keys and
+# no internet service to sign up for: web application, Python forecasting
+# service, Postgres, Redis and an Nginx front door.
+#
+# WHAT IT IS NOT
+# This is not how CityFlow AI is hosted. Production runs the web application on
+# Vercel with a Neon database, because that combination is free and requires no
+# server administration. Both paths are supported deliberately — Compose is how
+# somebody evaluates the project offline, Vercel is how it actually serves
+# users. See docs/00-SETUP-STEP-BY-STEP.md for the hosted route.
+# =============================================================================
+
+name: cityflow-ai
+
+services:
+  # ---------------------------------------------------------------- database
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cityflow
+      POSTGRES_PASSWORD: cityflow_local_only
+      POSTGRES_DB: cityflow
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    # Published so `npm run db:studio` and a local psql can reach it. Nothing
+    # else needs to: the other services use the internal network.
+    ports:
+      - "5432:5432"
+    healthcheck:
+      # `pg_isready` alone returns true before the database accepts queries, so
+      # the dependent services would still race it. Naming the user and database
+      # makes this a real readiness check.
+      test: ["CMD-SHELL", "pg_isready -U cityflow -d cityflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # ------------------------------------------------------------------- cache
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Forecasts are a cache, never a source of truth, so persistence is off:
+    # losing the lot costs one recomputation.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ------------------------------------------------------- forecasting service
+  ml:
+    build:
+      context: ./ml
+    restart: unless-stopped
+    environment:
+      CITYFLOW_ENVIRONMENT: development
+      # Empty means no authentication, which is correct on a private network
+      # like this one. The service REFUSES to start unauthenticated when
+      # CITYFLOW_ENVIRONMENT is "production".
+      CITYFLOW_API_KEY: ""
+      CITYFLOW_REDIS_URL: redis://redis:6379/0
+      CITYFLOW_SOLVER_TIMEOUT_SECONDS: "10"
+    depends_on:
+      redis:
+        condition: service_healthy
+    # Deliberately NOT published. Only Nginx and the web service can reach it.
+    expose:
+      - "8000"
+
+  # ------------------------------------------------------------- web application
+  web:
+    build:
+      context: ./web
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://cityflow:cityflow_local_only@db:5432/cityflow
+      # A fixed local-only secret. Production generates its own — see
+      # web/.env.example.
+      AUTH_SECRET: local-development-secret-at-least-32-characters-long
+      NEXT_PUBLIC_APP_URL: http://localhost:8080
+      ML_SERVICE_URL: http://ml:8000
+      ML_SERVICE_KEY: ""
+      # Longer than the serverless default: on this network the ML service is a
+      # container away rather than a cold start on another continent.
+      ML_SERVICE_TIMEOUT_MS: "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      ml:
+        condition: service_started
+    expose:
+      - "3000"
+
+  # --------------------------------------------------------------- migrations
+  # Runs `prisma db push` once, then exits. Kept as its own service so the
+  # schema is applied exactly once at start-up rather than by every web replica
+  # racing each other.
+  migrate:
+    build:
+      context: ./web
+    command: ["npx", "prisma", "db", "push", "--skip-generate"]
+    environment:
+      DATABASE_URL: postgresql://cityflow:cityflow_local_only@db:5432/cityflow
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  # -------------------------------------------------------------- front door
+  proxy:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8080:80"
+    depends_on:
+      web:
+        condition: service_started
+      ml:
+        condition: service_started
+
+volumes:
+  db-data:

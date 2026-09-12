@@ -1,9 +1,17 @@
 import { NextResponse } from "next/server";
 
-import { appDateOnly, appLocalDate } from "@/lib/app-time";
+import {
+  appDateOnly,
+  appLocalDate,
+  appMinutesSinceMidnight,
+} from "@/lib/app-time";
 import { getSession } from "@/lib/auth/session";
 import { getCity } from "@/lib/cities";
 import { prisma } from "@/lib/db";
+import {
+  assumedJourney,
+  getOwnedJourney,
+} from "@/lib/journeys/journey-service";
 import {
   recordAssistantMessage,
   resolveMessage,
@@ -52,15 +60,20 @@ export async function POST(request: Request) {
   }
 
   try {
-    const [profile, user] = await Promise.all([
-      prisma.travelProfile.findUnique({ where: { userId: session.userId } }),
+    const [journey, user] = await Promise.all([
+      // The routine the proposal was about. The client echoes back the id it
+      // was shown, so the plan is written against the routine the person
+      // actually saw named on the card — not whichever one we would guess now.
+      parsed.data.journeyId
+        ? getOwnedJourney(session.userId, parsed.data.journeyId)
+        : assumedJourney(session.userId, appLocalDate(), appMinutesSinceMidnight()),
       prisma.user.findUnique({
         where: { id: session.userId },
         select: { cityCode: true },
       }),
     ]);
 
-    if (!profile) {
+    if (!journey) {
       return NextResponse.json(
         { error: "Please set up your travel routine before confirming a plan." },
         { status: 400 }
@@ -69,14 +82,14 @@ export async function POST(request: Request) {
 
     const city = getCity(user?.cityCode);
 
-    const { messageId, ...change } = parsed.data;
+    const { messageId, journeyId: _journeyId, ...change } = parsed.data;
 
     const result = await applyIntention({
       userId: session.userId,
       cityCode: city.code,
       travelDate: appDateOnly(),
       localDate: appLocalDate(),
-      profile,
+      journey,
       change,
     });
 

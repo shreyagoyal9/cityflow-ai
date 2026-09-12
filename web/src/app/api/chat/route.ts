@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { appDateOnly, appLocalDate } from "@/lib/app-time";
+import { appDateOnly, appLocalDate, appMinutesSinceMidnight } from "@/lib/app-time";
 import { getSession } from "@/lib/auth/session";
 import { buildAssistantReply } from "@/lib/chat/assistant";
 import {
@@ -11,6 +11,7 @@ import { parseIntent } from "@/lib/chat/intent-parser";
 import { getCity } from "@/lib/cities";
 import { prisma } from "@/lib/db";
 import { demandAtFor, loadDemandContext } from "@/lib/demand/aggregate";
+import { assumedJourney } from "@/lib/journeys/journey-service";
 import { chatMessageSchema, fieldErrorsFrom } from "@/lib/validation";
 
 /**
@@ -53,11 +54,19 @@ export async function POST(request: Request) {
   }
 
   try {
-    const profile = await prisma.travelProfile.findUnique({
-      where: { userId: session.userId },
-    });
+    const travelDate = appDateOnly();
+    const localNow = appLocalDate();
 
-    if (!profile) {
+    // Which of the person's routines is this sentence most likely about? The
+    // confirmation card names it, so a wrong guess is corrected before anything
+    // is written. See `assumedJourney`.
+    const journey = await assumedJourney(
+      session.userId,
+      localNow,
+      appMinutesSinceMidnight()
+    );
+
+    if (!journey) {
       const text =
         "Before I can help with your travel plan, I need to know your regular routine. You can set it up from the “Set up my travel routine” page — it takes about a minute.";
 
@@ -80,9 +89,6 @@ export async function POST(request: Request) {
       });
     }
 
-    const travelDate = appDateOnly();
-    const localNow = appLocalDate();
-
     // Demand figures must belong to the city the user's plan is in.
     const user = await prisma.user.findUnique({
       where: { id: session.userId },
@@ -93,11 +99,11 @@ export async function POST(request: Request) {
     const [context, recommendation, intention] = await Promise.all([
       loadDemandContext(activeCity.code, travelDate, localNow),
       prisma.recommendation.findUnique({
-        where: { userId_travelDate: { userId: session.userId, travelDate } },
+        where: { journeyId_travelDate: { journeyId: journey.id, travelDate } },
         select: { recommendedDeparture: true },
       }),
       prisma.travelIntention.findUnique({
-        where: { userId_travelDate: { userId: session.userId, travelDate } },
+        where: { journeyId_travelDate: { journeyId: journey.id, travelDate } },
         select: { updatedDeparture: true, status: true },
       }),
     ]);
@@ -107,18 +113,18 @@ export async function POST(request: Request) {
     const currentDeparture =
       intention && intention.status === "CONFIRMED"
         ? intention.updatedDeparture
-        : profile.usualDeparture;
+        : journey.usualDeparture;
 
     const assistantContext = {
-      usualDeparture: profile.usualDeparture,
+      usualDeparture: journey.usualDeparture,
       currentDeparture,
-      requiredArrival: profile.requiredArrival,
-      typicalJourneyMinutes: profile.typicalJourneyMinutes,
-      primaryMode: profile.primaryMode,
+      requiredArrival: journey.requiredArrival,
+      typicalJourneyMinutes: journey.typicalJourneyMinutes,
+      primaryMode: journey.mode,
       cityName: activeCity.name,
       demandAt: demandAtFor(context),
       recommendedDeparture:
-        recommendation?.recommendedDeparture ?? profile.usualDeparture,
+        recommendation?.recommendedDeparture ?? journey.usualDeparture,
     };
 
     const intent = parseIntent(parsed.data.message, assistantContext);
@@ -139,6 +145,15 @@ export async function POST(request: Request) {
       assistantMessage,
       reply,
       intentKind: intent.kind,
+      // Returned so the confirmation card can name the routine it will change.
+      // A person with three routines must never have to guess which one a
+      // proposal is about.
+      journey: {
+        id: journey.id,
+        label: journey.label,
+        originArea: journey.originArea,
+        destinationArea: journey.destinationArea,
+      },
     });
   } catch (error) {
     console.error("[chat] failed:", error);

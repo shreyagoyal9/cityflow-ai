@@ -11,6 +11,18 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
 
   /**
+   * Build a self-contained server for the Docker image.
+   *
+   * `standalone` emits `.next/standalone/server.js` together with only the
+   * node_modules the application actually imports, which takes the runtime
+   * image from roughly 1.2 GB to about 250 MB.
+   *
+   * Vercel ignores this setting and builds its own way, so leaving it on costs
+   * the hosted deployment nothing — it only affects `docker compose`.
+   */
+  output: "standalone",
+
+  /**
    * Keep the Prisma client OUT of the bundler.
    *
    * Prisma generates a fresh client into node_modules every time the schema

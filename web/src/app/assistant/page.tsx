@@ -6,12 +6,18 @@ import { SaarthiMark } from "@/components/brand/saarthi-mark";
 import { AssistantConsole } from "@/components/chat/assistant-console";
 import { Badge } from "@/components/ui/badge";
 import { Container } from "@/components/ui/container";
-import { appDateOnly, formatAppDate } from "@/lib/app-time";
+import {
+  appDateOnly,
+  appLocalDate,
+  appMinutesSinceMidnight,
+  formatAppDate,
+} from "@/lib/app-time";
 import { getCurrentUser } from "@/lib/auth/session";
 import { ASSISTANT_NAME, ASSISTANT_TAGLINE } from "@/lib/chat/branding";
 import { loadHistory } from "@/lib/chat/history-service";
 import { getCity } from "@/lib/cities";
 import { prisma } from "@/lib/db";
+import { assumedJourney } from "@/lib/journeys/journey-service";
 import { formatTime } from "@/lib/demand/time-slots";
 import { getTransportMode } from "@/lib/travel";
 
@@ -36,27 +42,32 @@ export default async function AssistantPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const profile = await prisma.travelProfile.findUnique({
-    where: { userId: user.id },
-  });
+  // The routine the assistant will assume this conversation is about. It is
+  // named on screen and on every confirmation card, so the person can see which
+  // trip they are changing before anything is saved.
+  const journey = await assumedJourney(
+    user.id,
+    appLocalDate(),
+    appMinutesSinceMidnight()
+  );
 
   // There is nothing useful to discuss before a routine exists.
-  if (!profile) redirect("/onboarding");
+  if (!journey) redirect("/onboarding");
 
   const travelDate = appDateOnly();
 
   const [messages, recommendation, intention] = await Promise.all([
     loadHistory(user.id),
     prisma.recommendation.findUnique({
-      where: { userId_travelDate: { userId: user.id, travelDate } },
+      where: { journeyId_travelDate: { journeyId: journey.id, travelDate } },
     }),
     prisma.travelIntention.findUnique({
-      where: { userId_travelDate: { userId: user.id, travelDate } },
+      where: { journeyId_travelDate: { journeyId: journey.id, travelDate } },
     }),
   ]);
 
   const city = getCity(user.cityCode);
-  const mode = getTransportMode(intention?.transportMode ?? profile.primaryMode);
+  const mode = getTransportMode(intention?.transportMode ?? journey.mode);
 
   const confirmedPlan =
     intention && intention.status === "CONFIRMED" ? intention.updatedDeparture : null;
@@ -103,6 +114,7 @@ export default async function AssistantPage() {
               <h2 className="text-sm font-semibold text-fg">Today&apos;s plan</h2>
 
               <dl className="mt-4 space-y-2.5 text-sm">
+                <Row label="Journey" value={journey.label} strong />
                 <Row
                   label="Your plan"
                   value={
@@ -110,7 +122,7 @@ export default async function AssistantPage() {
                       ? "Not travelling"
                       : confirmedPlan
                         ? formatTime(confirmedPlan)
-                        : `${formatTime(profile.usualDeparture)} (usual)`
+                        : `${formatTime(journey.usualDeparture)} (usual)`
                   }
                   strong
                 />
@@ -122,7 +134,7 @@ export default async function AssistantPage() {
                       : "Not calculated yet"
                   }
                 />
-                <Row label="Arrive by" value={formatTime(profile.requiredArrival)} />
+                <Row label="Arrive by" value={formatTime(journey.requiredArrival)} />
                 <Row label="Transport" value={mode.label} />
               </dl>
 

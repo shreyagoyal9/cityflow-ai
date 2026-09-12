@@ -28,6 +28,11 @@ const PROTECTED_PREFIXES = [
   "/assistant",
   "/roads",
   "/participation",
+  "/journeys",
+  "/plan",
+  "/rewards",
+  "/insights",
+  "/settings",
 ];
 
 /** Pages that a signed-in user should not see again (they would be confusing). */
@@ -42,6 +47,20 @@ const AUTH_ONLY_PREFIXES = ["/login", "/signup"];
  * lib/auth/admin.ts for why both exist.
  */
 const ADMIN_PREFIXES = ["/admin"];
+
+/**
+ * The Municipal Dashboard. A third portal with a third role.
+ *
+ * A MUNICIPAL user sees road issues, employees and repair work — and nothing
+ * else. No commuter data, no demand analytics, no recommendations. That
+ * separation is the point: the people who fix roads have no business reading
+ * anybody's travel patterns, and the system should make that impossible rather
+ * than merely discouraged.
+ *
+ * ADMIN is allowed through as well, because somebody has to be able to set the
+ * portal up and add the first employees before any municipal account exists.
+ */
+const MUNICIPAL_PREFIXES = ["/municipal"];
 
 function startsWithAny(pathname: string, prefixes: string[]): boolean {
   return prefixes.some(
@@ -82,6 +101,19 @@ export async function proxy(request: NextRequest) {
     if (session.role !== "ADMIN") {
       // Not an error page: a commuter who lands here has done nothing wrong and
       // should simply end up where they belong.
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+  }
+
+  // 4. The Municipal Dashboard, same two-layer pattern as the Admin Portal.
+  if (startsWithAny(pathname, MUNICIPAL_PREFIXES)) {
+    if (!isSignedIn) {
+      const loginUrl = new URL("/login", request.url);
+      loginUrl.searchParams.set("next", `${pathname}${search}`);
+      return NextResponse.redirect(loginUrl);
+    }
+
+    if (session.role !== "MUNICIPAL" && session.role !== "ADMIN") {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
   }

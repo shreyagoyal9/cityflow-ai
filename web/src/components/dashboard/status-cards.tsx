@@ -4,15 +4,15 @@ import type { TravelProfile } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import type { DemandSlot } from "@/lib/demand/demand-model";
-import { WEEKDAYS, formatDuration, formatTime } from "@/lib/demand/time-slots";
+import { formatTime } from "@/lib/demand/time-slots";
 import { demandBadgeTone, demandTextClass } from "@/lib/demand/ui";
 import type { RoadIssueView } from "@/lib/roads/road-service";
 import { confidenceMeta, issueTypeLabel } from "@/lib/roads/types";
-import { DESTINATION_TYPES, getTransportMode } from "@/lib/travel";
+import { getTransportMode } from "@/lib/travel";
 
 /**
- * The smaller dashboard cards: current traffic status, the saved routine, road
- * conditions and travel options.
+ * The smaller dashboard cards: current traffic status, road conditions and
+ * travel options.
  *
  * They are grouped in one file because they are all short, read-only summaries
  * with no state of their own — splitting them into four files would add
@@ -50,63 +50,18 @@ export function TrafficStatusCard({ now, cityName }: { now: DemandSlot; cityName
 }
 
 /* -------------------------------------------------------------------------- */
-/*  The saved routine                                                          */
+/*  REMOVED IN PHASE 6 — RoutineCard                                           */
 /* -------------------------------------------------------------------------- */
-
-export function RoutineCard({ profile }: { profile: TravelProfile }) {
-  const mode = getTransportMode(profile.primaryMode);
-  const destinationLabel =
-    DESTINATION_TYPES.find((type) => type.code === profile.destinationType)?.label ??
-    "Destination";
-
-  const dayLabels = WEEKDAYS.filter((day) =>
-    profile.travelDays.includes(day.code)
-  ).map((day) => day.label);
-
-  return (
-    <Card>
-      <CardHeader
-        title="My routine"
-        action={
-          <Link href="/profile" className="text-sm font-medium text-primary underline">
-            Edit
-          </Link>
-        }
-      />
-
-      <p className="text-base font-medium text-fg">
-        {profile.homeArea} → {profile.destinationArea}
-      </p>
-      <p className="mt-1 text-xs text-muted">
-        {destinationLabel} · by {mode.label}
-      </p>
-
-      <dl className="mt-4 space-y-2 text-sm">
-        <Row label="Usual departure" value={formatTime(profile.usualDeparture)} />
-        <Row label="Required arrival" value={formatTime(profile.requiredArrival)} />
-        <Row
-          label="Normal journey"
-          value={formatDuration(profile.typicalJourneyMinutes)}
-        />
-        <Row
-          label="Flexibility"
-          value={
-            profile.isFlexible
-              ? `${profile.flexibilityMinutes} minutes${
-                  profile.willingToLeaveEarlier && profile.willingToLeaveLater
-                    ? " either way"
-                    : profile.willingToLeaveEarlier
-                      ? " earlier only"
-                      : " later only"
-                }`
-              : "Fixed departure"
-          }
-        />
-        <Row label="Travel days" value={dayLabels.join(", ") || "None selected"} />
-      </dl>
-    </Card>
-  );
-}
+//
+// `RoutineCard` rendered a person's single routine from their `TravelProfile`.
+// It was deleted rather than kept, because a person now has MANY routines and
+// those live in the `Journey` table. The profile still carries the old journey
+// columns for migration purposes, so a component reading them would have
+// compiled, rendered, and shown a stale trip — the worst kind of dead code,
+// because it looks like it works.
+//
+// Journeys are shown by `components/journeys/journey-list.tsx` (management) and
+// by the per-journey recommendation cards on the dashboard.
 
 function Row({ label, value }: { label: string; value: string }) {
   return (

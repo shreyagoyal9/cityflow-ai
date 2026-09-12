@@ -12,8 +12,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Container } from "@/components/ui/container";
-import { loadCityOverview, loadSystemHealth } from "@/lib/admin/analytics";
-import { formatAppDate } from "@/lib/app-time";
+import {
+  loadCityOverview,
+  loadModelledImpact,
+  loadSystemHealth,
+} from "@/lib/admin/analytics";
+import { ImpactPanel } from "@/components/admin/impact-panel";
+import { appDateOnly, formatAppDate } from "@/lib/app-time";
 import { getCity } from "@/lib/cities";
 import { DEMAND_LEVEL_LABEL } from "@/lib/demand/demand-model";
 import { formatSlotLabel } from "@/lib/demand/time-slots";
@@ -38,9 +43,10 @@ export default async function AdminOverviewPage({
   const params = await searchParams;
   const city = getCity(params.city);
 
-  const [overview, health] = await Promise.all([
+  const [overview, health, impact] = await Promise.all([
     loadCityOverview(city.code),
     loadSystemHealth(city.code),
+    loadModelledImpact(city.code, appDateOnly()),
   ]);
 
   const participationRate =
@@ -65,6 +71,11 @@ export default async function AdminOverviewPage({
           </div>
 
           <CitySwitcher active={city.code} basePath="/admin" />
+        </div>
+
+        {/* -------------------------------------------------- modelled impact */}
+        <div className="mt-6">
+          <ImpactPanel impact={impact} cityName={overview.cityName} />
         </div>
 
         {/* ------------------------------------------------------- top tiles */}

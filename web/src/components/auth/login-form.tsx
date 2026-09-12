@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -109,13 +110,10 @@ export function LoginForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
         Log in
       </Button>
 
-      {/*
-        Password recovery needs an email-sending service, which is added in a
-        later phase. Saying so is more useful than a link that does nothing.
-      */}
-      <p className="text-xs text-subtle">
-        Forgotten your password? Password recovery by email is not enabled yet in this
-        version of CityFlow AI.
+      <p className="text-sm text-muted">
+        <Link href="/forgot-password" className="font-medium text-primary underline">
+          Forgotten your password?
+        </Link>
       </p>
     </form>
   );

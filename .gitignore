@@ -27,6 +27,11 @@ out/
 dist/
 build/
 
+# Test and coverage output
+.pytest_cache/
+coverage/
+.jest-cache/
+
 # Logs
 *.log
 npm-debug.log*

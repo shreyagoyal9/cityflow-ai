@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { AdminHeader } from "@/components/admin/admin-header";
+import { MunicipalHeader } from "@/components/municipal/municipal-header";
+import type { SessionRole } from "@/lib/auth/jwt";
 import { Logo } from "@/components/brand/logo";
 import { SaarthiMark } from "@/components/brand/saarthi-mark";
 import { ASSISTANT_NAME } from "@/lib/chat/branding";
@@ -27,12 +29,28 @@ import { cn } from "@/lib/utils";
 /** Minimal view of the signed-in user that the header needs. */
 export interface HeaderSession {
   cityflowId: string;
-  role: "USER" | "ADMIN";
+  role: SessionRole;
 }
 
 const NAV_LINKS = [
   { href: "/", label: "Home" },
   { href: "/how-it-works", label: "How it works" },
+];
+
+/**
+ * Commuter links, shown once signed in.
+ *
+ * Order is deliberate and follows how often each is used: the dashboard every
+ * day, journeys when something changes, a one-off trip occasionally, rewards
+ * now and then. Roads and the assistant follow in the mobile menu.
+ */
+const SIGNED_IN_LINKS = [
+  { href: "/dashboard", label: "My dashboard" },
+  { href: "/journeys", label: "Journeys" },
+  { href: "/plan", label: "Plan a trip" },
+  { href: "/insights", label: "Insights" },
+  { href: "/rewards", label: "Rewards" },
+  { href: "/roads", label: "Roads" },
 ];
 
 export function SiteHeader({ session }: { session: HeaderSession | null }) {
@@ -58,6 +76,7 @@ export function SiteHeader({ session }: { session: HeaderSession | null }) {
     the commuter navigation can never appear on an admin screen.
   */
   if (pathname.startsWith("/admin")) return <AdminHeader />;
+  if (pathname.startsWith("/municipal")) return <MunicipalHeader />;
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -101,35 +120,27 @@ export function SiteHeader({ session }: { session: HeaderSession | null }) {
                 );
               })}
 
-              {session && (
-                <Link
-                  href="/dashboard"
-                  aria-current={pathname.startsWith("/dashboard") ? "page" : undefined}
-                  className={cn(
-                    "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                    pathname.startsWith("/dashboard")
-                      ? "bg-primary-soft text-primary"
-                      : "text-muted hover:bg-surface-2 hover:text-fg"
-                  )}
-                >
-                  My dashboard
-                </Link>
-              )}
-
-              {session && (
-                <Link
-                  href="/roads"
-                  aria-current={pathname.startsWith("/roads") ? "page" : undefined}
-                  className={cn(
-                    "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                    pathname.startsWith("/roads")
-                      ? "bg-primary-soft text-primary"
-                      : "text-muted hover:bg-surface-2 hover:text-fg"
-                  )}
-                >
-                  Roads
-                </Link>
-              )}
+              {/*
+                The signed-in links are data-driven rather than six near-identical
+                blocks. Adding a portal to the product should be one line here, not
+                a copy-paste that quietly drifts out of sync with the mobile menu.
+              */}
+              {session &&
+                SIGNED_IN_LINKS.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    aria-current={pathname.startsWith(link.href) ? "page" : undefined}
+                    className={cn(
+                      "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                      pathname.startsWith(link.href)
+                        ? "bg-primary-soft text-primary"
+                        : "text-muted hover:bg-surface-2 hover:text-fg"
+                    )}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
 
               {/*
                 Admins reach the portal from here. It is deliberately the last
@@ -148,6 +159,21 @@ export function SiteHeader({ session }: { session: HeaderSession | null }) {
                   )}
                 >
                   Admin Portal
+                </Link>
+              )}
+
+              {(session?.role === "MUNICIPAL" || session?.role === "ADMIN") && (
+                <Link
+                  href="/municipal"
+                  aria-current={pathname.startsWith("/municipal") ? "page" : undefined}
+                  className={cn(
+                    "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                    pathname.startsWith("/municipal")
+                      ? "bg-primary-soft text-primary"
+                      : "text-muted hover:bg-surface-2 hover:text-fg"
+                  )}
+                >
+                  Municipal
                 </Link>
               )}
 
@@ -256,13 +282,16 @@ export function SiteHeader({ session }: { session: HeaderSession | null }) {
 
               {session ? (
                 <>
-                  <Link
-                    href="/dashboard"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="rounded-lg px-3 py-2.5 text-sm font-medium text-fg hover:bg-surface-2"
-                  >
-                    My dashboard
-                  </Link>
+                  {SIGNED_IN_LINKS.map((link) => (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="rounded-lg px-3 py-2.5 text-sm font-medium text-fg hover:bg-surface-2"
+                    >
+                      {link.label}
+                    </Link>
+                  ))}
                   <Link
                     href="/assistant"
                     onClick={() => setMobileMenuOpen(false)}
@@ -270,13 +299,6 @@ export function SiteHeader({ session }: { session: HeaderSession | null }) {
                   >
                     <SaarthiMark className="h-4 w-4 text-primary" />
                     {ASSISTANT_NAME} · your travel guide
-                  </Link>
-                  <Link
-                    href="/roads"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="rounded-lg px-3 py-2.5 text-sm font-medium text-fg hover:bg-surface-2"
-                  >
-                    Road conditions
                   </Link>
                   <Link
                     href="/participation"
@@ -292,6 +314,13 @@ export function SiteHeader({ session }: { session: HeaderSession | null }) {
                   >
                     My profile
                   </Link>
+                  <Link
+                    href="/settings"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="rounded-lg px-3 py-2.5 text-sm font-medium text-fg hover:bg-surface-2"
+                  >
+                    Settings
+                  </Link>
                   {session.role === "ADMIN" && (
                     <Link
                       href="/admin"
@@ -299,6 +328,15 @@ export function SiteHeader({ session }: { session: HeaderSession | null }) {
                       className="rounded-lg px-3 py-2.5 text-sm font-medium text-fg hover:bg-surface-2"
                     >
                       Admin Portal
+                    </Link>
+                  )}
+                  {(session.role === "MUNICIPAL" || session.role === "ADMIN") && (
+                    <Link
+                      href="/municipal"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="rounded-lg px-3 py-2.5 text-sm font-medium text-fg hover:bg-surface-2"
+                    >
+                      Municipal Dashboard
                     </Link>
                   )}
                   <p className="px-3 py-1 text-xs text-subtle">
