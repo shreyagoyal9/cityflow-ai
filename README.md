@@ -244,7 +244,7 @@ cityflow-ai/
 
 ## Team
 
-Built by **Group 8** — [@shreyagoyal9](https://github.com/shreyagoyal9) and [@Shansit007](https://github.com/Shansit007) — as a capstone project. All three production deployments run from `main` on this repository.
+Built by **Group 8** — SHREYA GOYAL, SHANSIT SUMAN, TITHI SEMWAL, BHAVYA AGRAWAL, SAMARTH SINGH, SHASHANK DUBEY — as a capstone project. All three production deployments run from `main` on this repository.
 
 ## License
 
