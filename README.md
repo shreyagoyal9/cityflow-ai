@@ -229,7 +229,11 @@ cityflow-ai/
 
 ## Team
 
+<<<<<<< HEAD
 Built by **Group 8**.
+=======
+Built by **Group 8** — SHREYA GOYAL, SHANSIT SUMAN, TITHI SEMWAL, BHAVYA AGRAWAL, SAMARTH SINGH, SHASHANK DUBEY — as a capstone project. All three production deployments run from `main` on this repository.
+>>>>>>> e69ac4af0013a26d040fcb469765c772a235e124
 
 ## License
 
