@@ -28,7 +28,7 @@ That's the question CityFlow AI tries to answer. Not "which road" — "when." If
 
 That's what this project spends most of its code on: a demand model that predicts how busy a departure slot is going to get, a re-optimiser that spreads confirmed trips across nearby slots instead of just relocating the peak, and three completely separate places — a commuter app, a city admin portal, and a municipal road-repair dashboard — that all read from the same live data instead of quietly drifting apart the way a lot of "connected" capstone projects do.
 
-It started as a three-part college specification (a traveller dashboard, an admin panel, a municipal dashboard, each with its own detailed PDF brief). It didn't stay a checklist for long — once the demand model was actually running against real numbers, the interesting engineering problems showed up on their own: how do you re-optimise a whole city's worth of departures without creating a *new* peak fifteen minutes earlier? How do you let a road-condition report from a stranger's phone sensor reach a municipal officer's queue without ever exposing who that stranger is? How do you show someone "you'd save about 8 minutes" without that number quietly turning into a promise?
+We scoped it as three connected pieces from day one — a traveller-facing app, a city admin panel, and a municipal road-repair dashboard — because a demand-smoothing system that only talks to commuters isn't actually useful to anyone who has to act on it. And once the demand model was actually running against real numbers, the interesting engineering problems showed up on their own: how do you re-optimise a whole city's worth of departures without creating a *new* peak fifteen minutes earlier? How do you let a road-condition report from a stranger's phone sensor reach a municipal officer's queue without ever exposing who that stranger is? How do you show someone "you'd save about 8 minutes" without that number quietly turning into a promise?
 
 ## Live demo
 
@@ -148,7 +148,7 @@ This is the part most student projects gloss over, and it's the part we think ac
 | AI assistant (Saarthi) | **Rule-based core + optional real LLM fallback** | A regex/time-parser pipeline handles the common cases; a hosted LLM (Groq) only steps in for phrasing the rules can't follow — and only when a key is actually configured. |
 | Carpool matching | **Not built** | It's a single stated preference on your profile today, not a matching engine. We'd rather say that than let a checkbox imply more than it does. |
 | Notification delivery | **Stored and displayed, not actually pushed** | The Admin Portal's notification composer really writes to the database and really shows up in the feed — it's labeled "demo delivery" because no SMS/push/email provider is wired in behind it. |
-| Rewards / points | **Deliberately absent** | The brief explicitly ruled out gamification. The app says so directly rather than shipping a hidden or half-built rewards system. |
+| Rewards / points | **Deliberately absent** | We ruled out gamification early, on purpose. The app says so directly rather than shipping a hidden or half-built rewards system. |
 
 ## Does it actually work?
 
