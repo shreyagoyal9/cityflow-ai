@@ -50,8 +50,7 @@ Same code, same database, gated at the edge by role — a commuter can't reach `
 
 <img src="docs/assets/architecture.png" width="100%" alt="CityFlow AI system architecture diagram" />
 
-<details>
-<summary><strong>Native Mermaid version (renders on GitHub)</strong></summary>
+Same architecture, as a native diagram (renders directly on GitHub, no click needed):
 
 ```mermaid
 flowchart TB
@@ -120,8 +119,6 @@ flowchart TB
     classDef optionalNode stroke-dasharray: 4 3,fill:#f6f6f6,stroke:#999,color:#555
     class MLService,Forecast,Optimize,Redis,Externals,Groq,Resend,Meteo optionalNode
 ```
-
-</details>
 
 | Design decision | Why |
 |---|---|
@@ -229,11 +226,7 @@ cityflow-ai/
 
 ## Team
 
-<<<<<<< HEAD
-Built by **Group 8**.
-=======
-Built by **Group 8** — SHREYA GOYAL, SHANSIT SUMAN, TITHI SEMWAL, BHAVYA AGRAWAL, SAMARTH SINGH, SHASHANK DUBEY — as a capstone project. All three production deployments run from `main` on this repository.
->>>>>>> e69ac4af0013a26d040fcb469765c772a235e124
+Built by **Group 8** — [Shreya Goyal](https://github.com/shreyagoyal9), [Shansit Suman](https://github.com/Shansit007), [Bhavya Agrawal](https://github.com/bhavya13062006), Tithi Semwal, Samarth Singh, and Shashank Dubey.
 
 ## License
 
